@@ -1,217 +1,206 @@
 import imaplib
 import email
 from email.header import decode_header
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-import json
-import asyncio
-from fastapi.middleware.cors import CORSMiddleware
+# import asyncio
+from datetime import datetime, timedelta
+from typing import Optional, Dict, List
+# import aiohttp
+from cachetools import TTLCache
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
-# Environment variables for email credentials
+# Environment variables
 server = os.getenv("IMAP_SERVER", "imap.gmail.com")
 email_user = os.getenv("EMAIL_USER", "ashishkhuranatalentelgia@gmail.com")
 email_pass = os.getenv("EMAIL_PASS", "sufc vywh pcxe lnes")
 folder = os.getenv("EMAIL_FOLDER", "INBOX")
-email_limit = int(os.getenv("EMAIL_LIMIT", 100))
-# keyword = os.getenv("KEYWORD", "ATS")
-email_check_interval = int(os.getenv("EMAIL_CHECK_INTERVAL", 30))
-retry_interval = int(os.getenv("RETRY_INTERVAL", 60))  # Time between retries if connection fails
+cache_ttl = int(os.getenv("CACHE_TTL", 300))  # Cache timeout in seconds
+max_workers = int(os.getenv("MAX_WORKERS", 5))  # Maximum number of thread workers
 
 app = FastAPI()
 
-origins = [
-    "http://localhost",  # Allow localhost for development
-    "http://localhost:8000",  # Allow FastAPI's own origin (if the front-end and back-end are hosted on the same server)
-    "*",  # Allow all origins (you can specify your front-end URL here instead of "*" for better security)
-]
-
-# Add CORSMiddleware to allow cross-origin requests
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all or specified origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods like GET, POST, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class EmailSubjectResponse(BaseModel):
     subject: str
     email_id: str
+    date: Optional[str] = None
 
+# Initialize caches with TTL
+email_cache = TTLCache(maxsize=1000, ttl=cache_ttl)
+detail_cache = TTLCache(maxsize=500, ttl=cache_ttl)
+thread_local = threading.local()
+executor = ThreadPoolExecutor(max_workers=max_workers)
 
-async def fetch_emails(keyword: str, offset: int = 0, limit: int = 10):
-    """
-    Fetch email subjects from the IMAP server asynchronously, with pagination.
-    Args:
-        keyword (str): Keyword to filter email subjects. If None, fetch all emails.
-        offset (int): The starting position of the emails to fetch.
-        limit (int): The number of emails to fetch.
-    """
-    email_subjects = []
+def get_imap_connection():
+    """Create and return a thread-local IMAP connection"""
+    if not hasattr(thread_local, "imap"):
+        thread_local.imap = imaplib.IMAP4_SSL(server)
+        thread_local.imap.login(email_user, email_pass)
+        thread_local.imap.select(folder)
+    return thread_local.imap
+
+def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None) -> List[EmailSubjectResponse]:
+    """Fetch a batch of emails using a single thread"""
+    emails = []
+    try:
+        mail = get_imap_connection()
+        for msg_num in msg_nums:
+            cache_key = f"{msg_num.decode()}"
+            cached_email = email_cache.get(cache_key)
+            
+            if cached_email:
+                if keyword is None or keyword.lower() in cached_email.subject.lower():
+                    emails.append(cached_email)
+                continue
+
+            status, msg_data = mail.fetch(msg_num, "(RFC822.HEADER)")
+            if status != "OK":
+                continue
+
+            for response_part in msg_data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    subject, encoding = decode_header(msg["Subject"])[0]
+                    if isinstance(subject, bytes):
+                        subject = subject.decode(encoding if encoding else "utf-8")
+                    
+                    date_str = msg.get("Date")
+                    email_resp = EmailSubjectResponse(
+                        email_id=msg_num.decode(),
+                        subject=subject,
+                        date=date_str
+                    )
+                    
+                    # Cache the email
+                    email_cache[cache_key] = email_resp
+                    
+                    if keyword is None or keyword.lower() in subject.lower():
+                        emails.append(email_resp)
+                    break
+
+    except Exception as e:
+        print(f"Error in batch processing: {e}")
+    
+    return emails
+
+async def fetch_emails(keyword: str, limit: int = 10) -> List[EmailSubjectResponse]:
+    """Fetch emails with parallel processing and caching"""
     try:
         mail = imaplib.IMAP4_SSL(server)
         mail.login(email_user, email_pass)
         mail.select(folder)
 
-        # Search for all emails in the mailbox
+        # Search for all email IDs
         status, messages = mail.search(None, "ALL")
         if status != "OK":
             raise HTTPException(status_code=404, detail="No messages found")
 
-        messages = messages[0].split()
-        total_emails = len(messages)
-        print(f"Total emails in the folder: {total_emails}")
+        message_nums = messages[0].split()
+        if limit:
+            message_nums = message_nums[-limit:]
 
-        # Adjust offset and limit
-        start = max(0, total_emails - (offset + limit))
-        end = max(0, total_emails - offset)
-        selected_messages = messages[0:limit]
+        # Split messages into batches for parallel processing
+        batch_size = 10
+        batches = [message_nums[i:i + batch_size] for i in range(0, len(message_nums), batch_size)]
 
-        print(f"Fetching emails {start + 1} to {end}...")
+        # Process batches in parallel using ThreadPoolExecutor
+        email_subjects = []
+        futures = []
+        
+        for batch in batches:
+            future = executor.submit(fetch_email_batch, batch, keyword)
+            futures.append(future)
 
-        for msg_num in selected_messages:
-            # Fetch the email by ID
-            status, msg_data = mail.fetch(msg_num, "(RFC822)")
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    # Parse the email content
-                    msg = email.message_from_bytes(response_part[1])
-                    subject, encoding = decode_header(msg["Subject"])[0]
-                    if isinstance(subject, bytes):
-                        subject = subject.decode(encoding if encoding else "utf-8")
+        # Gather results
+        for future in futures:
+            email_subjects.extend(future.result())
 
-                    # Check if the subject contains the keyword
-                    if keyword is not None:
-                        if keyword.lower() in subject.lower():
-                            email_subjects.append(
-                                EmailSubjectResponse(
-                                    email_id=msg_num.decode(),  # Email ID as string
-                                    subject=subject,
-                                )
-                            )
-                    else:
-                        email_subjects.append(
-                                EmailSubjectResponse(
-                                    email_id=msg_num.decode(),  # Email ID as string
-                                    subject=subject,
-                                )
-                            )
         mail.logout()
-
-    except (imaplib.IMAP4_SSL.error, imaplib.IMAP4.error) as e:
-        print(f"Error connecting to IMAP server: {e}")
-        raise HTTPException(status_code=500, detail="IMAP server connection failed")
+        return email_subjects
 
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while fetching emails")
 
-    return email_subjects
+async def fetch_email_by_id(email_id: str) -> dict:
+    """Fetch single email with caching"""
+    cache_key = f"detail_{email_id}"
+    cached_email = detail_cache.get(cache_key)
+    if cached_email:
+        return cached_email
 
-async def fetch_email_by_id(email_id: str):
-    """
-    Fetch the complete email details by its ID.
-    Args:
-        email_id (str): The unique ID of the email to fetch.
-    Returns:
-        dict: A dictionary containing email details like subject, sender, recipients, and body.
-    """
     try:
-        # Connect to the IMAP server
         mail = imaplib.IMAP4_SSL(server)
         mail.login(email_user, email_pass)
         mail.select(folder)
 
-        # Fetch the email by its ID
-        status, msg_data = mail.fetch(email_id, "(RFC822)")
+        status, msg_data = mail.fetch(email_id.encode(), "(RFC822)")
         if status != "OK":
             raise HTTPException(status_code=404, detail=f"Email with ID {email_id} not found")
 
         for response_part in msg_data:
             if isinstance(response_part, tuple):
-                # Parse the email content
                 msg = email.message_from_bytes(response_part[1])
-
-                # Extract details
+                
                 subject, encoding = decode_header(msg["Subject"])[0]
                 if isinstance(subject, bytes):
                     subject = subject.decode(encoding if encoding else "utf-8")
 
-                from_ = msg.get("From")
-                to = msg.get("To")
-                date = msg.get("Date")
-
-                # Get the email body
-                body = ""
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        content_type = part.get_content_type()
-                        content_disposition = str(part.get("Content-Disposition"))
-
-                        if content_type == "text/plain" and "attachment" not in content_disposition:
-                            body = part.get_payload(decode=True).decode()
-                            break
-                else:
-                    body = msg.get_payload(decode=True).decode()
-
-                # Return the email details
-                return {
+                # Extract email details
+                email_detail = {
                     "email_id": email_id,
                     "subject": subject,
-                    "from": from_,
-                    "to": to,
-                    "date": date,
-                    "body": body,
+                    "from": msg.get("From"),
+                    "to": msg.get("To"),
+                    "date": msg.get("Date"),
+                    "body": "",
                 }
 
-        mail.logout()
+                # Get email body
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/plain" and "attachment" not in str(part.get("Content-Disposition", "")):
+                            email_detail["body"] = part.get_payload(decode=True).decode()
+                            break
+                else:
+                    email_detail["body"] = msg.get_payload(decode=True).decode()
 
-    except (imaplib.IMAP4_SSL.error, imaplib.IMAP4.error) as e:
-        print(f"Error connecting to IMAP server: {e}")
-        raise HTTPException(status_code=500, detail="IMAP server connection failed")
+                # Cache the result
+                detail_cache[cache_key] = email_detail
+                return email_detail
+
+        mail.logout()
 
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while fetching the email")
 
+@app.get("/emails/all", response_model=List[EmailSubjectResponse])
+async def get_email_subjects(limit: Optional[int] = None):
+    """Get all email subjects"""
+    return await fetch_emails(None, limit=limit)
 
-@app.get("/emails/all", response_model=list[EmailSubjectResponse])
-async def get_email_subjects(limit: int | None = None):
-    """
-    Fetch email subjects from the mail server and return them based on whether they contain the keyword.
-    This will return the email subjects as a JSON response.
-    """
-    if limit is not None:
-        email_subjects = await fetch_emails(None, limit=limit)
-    else:
-        email_subjects = await fetch_emails(None)
-    return email_subjects
+@app.get("/emails/{keyword}", response_model=List[EmailSubjectResponse])
+async def get_email_subjects(keyword: str, limit: Optional[int] = None):
+    """Get filtered email subjects"""
+    return await fetch_emails(keyword, limit=limit)
 
-@app.get("/emails/{keyword}", response_model=list[EmailSubjectResponse])
-async def get_email_subjects(keyword:str, limit: int | None = None):
-    """
-    Fetch email subjects from the mail server and return them based on whether they contain the keyword.
-    This will return the email subjects as a JSON response.
-    """
-    if limit is not None:
-        email_subjects = await fetch_emails(keyword, limit=limit)
-    else:
-        email_subjects = await fetch_emails(keyword)
-    return email_subjects
-
-
-@app.get("/email/{email_id}", response_model=dict)
+@app.get("/email/{email_id}")
 async def get_email_by_id(email_id: str):
-    """
-    Fetch a single email's complete details by its ID.
-    Args:
-        email_id (str): The unique ID of the email to fetch.
-    Returns:
-        dict: A dictionary containing email details like subject, sender, recipients, and body.
-    """
-    email_details = await fetch_email_by_id(email_id)
-    return email_details
+    """Get single email details"""
+    return await fetch_email_by_id(email_id)
 
 if __name__ == "__main__":
     import uvicorn
