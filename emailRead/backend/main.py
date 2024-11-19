@@ -3,13 +3,14 @@ import email
 from email.header import decode_header
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from cachetools import TTLCache
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import re
 
 # Environment variables
 server = os.getenv("IMAP_SERVER", "imap.gmail.com")
@@ -33,8 +34,10 @@ app.add_middleware(
 class EmailSubjectResponse(BaseModel):
     subject: str
     email_id: str
-    date: Optional[str] = None
-
+    date: str
+    urgent: bool
+    sku: Optional[str] = None
+    
 # Initialize caches with TTL
 email_cache = TTLCache(maxsize=1000, ttl=cache_ttl)
 detail_cache = TTLCache(maxsize=500, ttl=cache_ttl)
@@ -49,83 +52,83 @@ def get_imap_connection():
         thread_local.imap.select(folder)
     return thread_local.imap
 
-def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None) -> List[EmailSubjectResponse]:
-    """Fetch a batch of emails using a single thread"""
+def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limit: int = 50) -> List[EmailSubjectResponse]:
+    """Fetch a batch of emails using a single thread."""
     emails = []
+    urgency_terms = [
+        "Immediate", "Critical", "Important", "Pressing", "Emergency", "Hasty", "Swift",
+        "Quick", "Instant", "Rapid", "Fast", "Alarming", "Dire", "Priority", "Vital",
+        "Exigent", "Necessary", "Expedite", "Crucial", "Rush", "Time-sensitive", "Prompt",
+        "On-demand", "Essential", "Imperative", "High-priority", "Flash", "Accelerate",
+        "Severe", "Pinnacle", "Burning", "Urgency", "Urgent", "Unavoidable", "Must-do", "Grave",
+        "Immediate-action", "Top-priority", "Demanding", "Overdue", "Peak", "Now",
+        "Deadline-driven", "Accelerated", "Mandatory", "Pivotal", "Clamoring",
+        "Necessary-action", "Alarmed", "Speedy", "Deadline-critical"
+    ]
+    # SKU pattern (matches SKUs anywhere in the subject)
+    sku_pattern = r"[A-Z]{2}-[A-Z]{2}-[A-Z]{1,3}-\d{6}"
+    today = datetime.today()
+
+    # Subtract 50 days (as per original code)
+    date_50_days_before = today - timedelta(days=50)
+
+    # Convert to the desired format
+    formatted_date = date_50_days_before.strftime("%d-%b-%Y")
+    
     try:
         mail = get_imap_connection()
-        for msg_num in msg_nums:
-            cache_key = f"{msg_num.decode()}"
-            cached_email = email_cache.get(cache_key)
+        result, data = mail.search(None, 'SINCE', str(formatted_date))
+        
+        if result == 'OK':
+            total_emails = len(data[0].split())  # Get the total number of emails
+            # Update the limit if there are fewer emails than the current limit
+            adjusted_limit = min(limit, total_emails)
+            print(adjusted_limit , "#########################3")
+            msg_nums = data[0].split()[-adjusted_limit:]  # Fetch the latest 'adjusted_limit' emails
             
-            if cached_email:
-                if keyword is None or keyword.lower() in cached_email.subject.lower():
-                    emails.append(cached_email)
-                continue
+            for msg_num in msg_nums:
+                status, msg_data = mail.fetch(msg_num, "(RFC822.HEADER)")
+                if status != "OK":
+                    continue
 
-            status, msg_data = mail.fetch(msg_num, "(RFC822.HEADER)")
-            if status != "OK":
-                continue
+                for response_part in msg_data:
+                    if isinstance(response_part, tuple):
+                        msg = email.message_from_bytes(response_part[1])
+                        subject, encoding = decode_header(msg["Subject"])[0]
+                        if isinstance(subject, bytes):
+                            subject = subject.decode(encoding if encoding else "utf-8")
+                        
+                        date_str = msg.get("Date")
+                        urgent = any(term.lower() in subject.lower() for term in urgency_terms)
 
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    subject, encoding = decode_header(msg["Subject"])[0]
-                    if isinstance(subject, bytes):
-                        subject = subject.decode(encoding if encoding else "utf-8")
-                    
-                    date_str = msg.get("Date")
-                    email_resp = EmailSubjectResponse(
-                        email_id=msg_num.decode(),
-                        subject=subject,
-                        date=date_str
-                    )
-                    
-                    # Cache the email
-                    email_cache[cache_key] = email_resp
-                    
-                    if keyword is None or keyword.lower() in subject.lower():
-                        emails.append(email_resp)
-                    break
+                        # Extract SKU if it matches the pattern
+                        sku_match = re.search(sku_pattern, subject)
+                        sku = sku_match.group(0) if sku_match else None
+
+                        email_resp = EmailSubjectResponse(
+                            email_id=msg_num.decode(),
+                            subject=subject,
+                            date=date_str,
+                            urgent=urgent,
+                            sku=sku  # Add SKU to the response
+                        )
+
+                        # Only add email if it matches the keyword or keyword is None
+                        if keyword is None or keyword.lower() in subject.lower():
+                            emails.insert(0, email_resp)  # Insert at the beginning of the list
 
     except Exception as e:
         print(f"Error in batch processing: {e}")
-    
+
     return emails
 
-async def fetch_emails(keyword: str, limit: int = 10) -> List[EmailSubjectResponse]:
+
+def fetch_emails(keyword: str, limit: int = 10) -> List[EmailSubjectResponse]:
     """Fetch emails with parallel processing and caching"""
     try:
-        mail = imaplib.IMAP4_SSL(server)
-        mail.login(email_user, email_pass)
-        mail.select(folder)
 
-        # Search for all email IDs
-        status, messages = mail.search(None, "ALL")
-        if status != "OK":
-            raise HTTPException(status_code=404, detail="No messages found")
+        email_subjects = fetch_email_batch([], keyword, limit)
 
-        message_nums = messages[0].split()
-        if limit:
-            message_nums = message_nums[-limit:]
-
-        # Split messages into batches for parallel processing
-        batch_size = 10
-        batches = [message_nums[i:i + batch_size] for i in range(0, len(message_nums), batch_size)]
-
-        # Process batches in parallel using ThreadPoolExecutor
-        email_subjects = []
-        futures = []
-        
-        for batch in batches:
-            future = executor.submit(fetch_email_batch, batch, keyword)
-            futures.append(future)
-
-        # Gather results
-        for future in futures:
-            email_subjects.extend(future.result())
-
-        mail.logout()
         return email_subjects
 
     except Exception as e:
@@ -134,11 +137,6 @@ async def fetch_emails(keyword: str, limit: int = 10) -> List[EmailSubjectRespon
 
 async def fetch_email_by_id(email_id: str) -> dict:
     """Fetch single email with caching"""
-    cache_key = f"detail_{email_id}"
-    cached_email = detail_cache.get(cache_key)
-    if cached_email:
-        return cached_email
-
     try:
         mail = imaplib.IMAP4_SSL(server)
         mail.login(email_user, email_pass)
@@ -174,9 +172,6 @@ async def fetch_email_by_id(email_id: str) -> dict:
                             break
                 else:
                     email_detail["body"] = msg.get_payload(decode=True).decode()
-
-                # Cache the result
-                detail_cache[cache_key] = email_detail
                 return email_detail
 
         mail.logout()
@@ -188,7 +183,7 @@ async def fetch_email_by_id(email_id: str) -> dict:
 @app.get("/emails/all", response_model=List[EmailSubjectResponse])
 async def get_email_subjects(limit: Optional[int] = None):
     """Get all email subjects"""
-    return await fetch_emails(None, limit=limit)
+    return fetch_emails(None, limit=limit)
 
 @app.get("/emails/{keyword}", response_model=List[EmailSubjectResponse])
 async def get_email_subjects(keyword: str, limit: Optional[int] = None):

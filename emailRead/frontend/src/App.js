@@ -10,7 +10,7 @@ const App = () => {
   return (
     <div>
       <EmailRead onSelectEmail={setSelectedEmail} />
-      <EmailDetails email={selectedEmail} />
+      {/* <EmailDetails email={selectedEmail} /> */}
     </div>
   );
 };

@@ -3,26 +3,32 @@ import axios from 'axios';
 import { 
   Box,
   Card,
-  CardContent,
   Typography,
   Button,
-  Divider,
-  Avatar,
   CircularProgress,
   Alert,
-  Fade,
   useTheme,
   FormControl,
   Select,
   MenuItem,
-  Stack
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Fade
 } from '@mui/material';
 import { 
   Refresh as RefreshIcon,
   Mail as MailIcon,
   ErrorOutline as ErrorIcon,
   FilterList as FilterIcon,
-  FormatListNumbered as ListIcon
+  FormatListNumbered as ListIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon
 } from '@mui/icons-material';
 
 export default function EmailReader() {
@@ -30,7 +36,7 @@ export default function EmailReader() {
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [filter, setFilter] = React.useState('ALL');
-  const [limit, setLimit] = React.useState(100);
+  const [limit, setLimit] = React.useState(50);
   const theme = useTheme();
 
   const fetchData = async (keyword = 'all', emailLimit = limit) => {
@@ -38,7 +44,7 @@ export default function EmailReader() {
     setError(null);
     try {
       const response = await axios.get(
-        `http://192.168.0.129:8000/emails/${keyword.toLowerCase()}?limit=${emailLimit}`
+        `http://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/emails/${keyword.toLowerCase()}?limit=${emailLimit}`
       );
       setData(response.data);
     } catch (err) {
@@ -74,52 +80,67 @@ export default function EmailReader() {
   };
 
   const LoadingSkeleton = () => (
-    <Box sx={{ p: 2 }}>
+    <TableBody>
       {[...Array(5)].map((_, i) => (
-        <Box
-          key={i}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            mb: 2,
-            animation: 'pulse 1.5s ease-in-out infinite',
-            '@keyframes pulse': {
-              '0%, 100%': { opacity: 1 },
-              '50%': { opacity: 0.5 },
-            },
-          }}
-        >
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              backgroundColor: 'rgba(0, 0, 0, 0.11)',
-            }}
-          />
-          <Box sx={{ flex: 1 }}>
+        <TableRow key={i}>
+          <TableCell>
             <Box
               sx={{
-                height: 12,
-                width: '70%',
+                height: 20,
+                width: '40px',
                 backgroundColor: 'rgba(0, 0, 0, 0.11)',
                 borderRadius: 1,
-                mb: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
               }}
             />
+          </TableCell>
+          <TableCell>
             <Box
               sx={{
-                height: 8,
-                width: '40%',
+                height: 20,
+                width: '60%',
                 backgroundColor: 'rgba(0, 0, 0, 0.11)',
                 borderRadius: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
               }}
             />
-          </Box>
-        </Box>
+          </TableCell>
+          <TableCell>
+            <Box
+              sx={{
+                height: 20,
+                width: '30%',
+                backgroundColor: 'rgba(0, 0, 0, 0.11)',
+                borderRadius: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+          </TableCell>
+          <TableCell>
+            <Box
+              sx={{
+                height: 20,
+                width: '80px',
+                backgroundColor: 'rgba(0, 0, 0, 0.11)',
+                borderRadius: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+          </TableCell>
+          <TableCell>
+            <Box
+              sx={{
+                height: 20,
+                width: '80px',
+                backgroundColor: 'rgba(0, 0, 0, 0.11)',
+                borderRadius: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+          </TableCell>
+        </TableRow>
       ))}
-    </Box>
+    </TableBody>
   );
 
   return (
@@ -130,14 +151,14 @@ export default function EmailReader() {
         p: 3,
         display: 'flex',
         justifyContent: 'center',
-        alignItems: 'center',
+        alignItems: 'flex-start',
       }}
     >
       <Card
         elevation={4}
         sx={{
           width: '100%',
-          maxWidth: 600,
+          maxWidth: 1400,
           borderRadius: 2,
           overflow: 'hidden',
         }}
@@ -182,29 +203,20 @@ export default function EmailReader() {
           </Box>
 
           {/* Filters Stack */}
-          <Stack spacing={2}>
+          <Stack direction="row" spacing={2}>
             {/* Filter Select */}
             <FormControl 
-              fullWidth
-              size="small"
               sx={{ 
+                flex: 1,
                 backgroundColor: 'white',
                 borderRadius: 1,
                 '& .MuiOutlinedInput-root': {
                   '& fieldset': {
                     borderColor: 'transparent',
                   },
-                  '&:hover fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&.Mui-disabled': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                  }
-                },
+                }
               }}
+              size="small"
             >
               <Select
                 value={filter}
@@ -212,12 +224,7 @@ export default function EmailReader() {
                 displayEmpty
                 disabled={loading}
                 startAdornment={
-                  <FilterIcon 
-                    sx={{ 
-                      mr: 1, 
-                      color: loading ? theme.palette.action.disabled : theme.palette.primary.main 
-                    }} 
-                  />
+                  <FilterIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
                 }
               >
                 <MenuItem value="ALL">All Emails</MenuItem>
@@ -228,26 +235,17 @@ export default function EmailReader() {
 
             {/* Limit Select */}
             <FormControl 
-              fullWidth
-              size="small"
               sx={{ 
+                flex: 1,
                 backgroundColor: 'white',
                 borderRadius: 1,
                 '& .MuiOutlinedInput-root': {
                   '& fieldset': {
                     borderColor: 'transparent',
                   },
-                  '&:hover fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&.Mui-disabled': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                  }
-                },
+                }
               }}
+              size="small"
             >
               <Select
                 value={limit}
@@ -255,12 +253,7 @@ export default function EmailReader() {
                 displayEmpty
                 disabled={loading}
                 startAdornment={
-                  <ListIcon 
-                    sx={{ 
-                      mr: 1, 
-                      color: loading ? theme.palette.action.disabled : theme.palette.primary.main 
-                    }} 
-                  />
+                  <ListIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
                 }
               >
                 <MenuItem value={10}>10 Emails</MenuItem>
@@ -272,7 +265,7 @@ export default function EmailReader() {
           </Stack>
         </Box>
 
-        <CardContent sx={{ p: 0 }}>
+        <Box sx={{ p: 0 }}>
           {/* Error Alert */}
           {error && (
             <Alert 
@@ -297,77 +290,62 @@ export default function EmailReader() {
             {data.length} {data.length === 1 ? 'email' : 'emails'} found
           </Typography>
 
-          {/* Loading State */}
-          {loading ? (
-            <LoadingSkeleton />
-          ) : (
-            /* Email List */
-            <Box sx={{ maxHeight: 600, overflow: 'auto' }}>
-              {data.length === 0 ? (
-                <Typography sx={{ p: 3, textAlign: 'center', color: theme.palette.text.secondary }}>
-                  No emails found for the selected filter
-                </Typography>
+          {/* Table Container */}
+          <TableContainer sx={{ maxHeight: 600 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ width: '80px', fontWeight: 'bold' }}>Sr No</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Subject</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                  <TableCell sx={{ width: '100px', fontWeight: 'bold' }}>Urgent</TableCell>
+                  <TableCell sx={{ width: '120px', fontWeight: 'bold' }}>SKU</TableCell>
+                </TableRow>
+              </TableHead>
+              
+              {loading ? (
+                <LoadingSkeleton />
               ) : (
-                data.map((email, index) => (
-                  <Fade in key={index}>
-                    <Box>
-                      <Box
+                <TableBody>
+                  {data.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center">
+                        <Typography sx={{ py: 2, color: theme.palette.text.secondary }}>
+                          No emails found for the selected filter
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    data.map((email, index) => (
+                      <TableRow
+                        key={index}
                         onClick={() => handleEmailClick(email, index)}
                         sx={{
-                          p: 2,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 2,
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease',
                           '&:hover': {
                             backgroundColor: theme.palette.action.hover,
                           },
                         }}
                       >
-                        <Avatar
-                          sx={{
-                            bgcolor: theme.palette.primary.main,
-                            width: 40,
-                            height: 40,
-                          }}
-                        >
-                          {email.subject.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="subtitle1"
-                            sx={{
-                              fontWeight: 500,
-                              mb: 0.5,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {email.subject}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {new Date().toLocaleDateString()}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      <Divider />
-                    </Box>
-                  </Fade>
-                ))
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>{email.subject}</TableCell>
+                        <TableCell>{email.date}</TableCell>
+                        <TableCell>
+                          {email.urgent ? ( // Random urgent status for demonstration
+                            <CheckCircleIcon sx={{ color: theme.palette.error.main }} />
+                          ) : (
+                            <CancelIcon sx={{ color: theme.palette.success.main }} />
+                          )}
+                        </TableCell>
+                        <TableCell>{email.sku ? email.sku : <CancelIcon sx={{ color: theme.palette.success.main }} />}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
               )}
-            </Box>
-          )}
-        </CardContent>
+            </Table>
+          </TableContainer>
+        </Box>
       </Card>
     </Box>
   );
