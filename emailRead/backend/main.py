@@ -5,10 +5,8 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-# import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-# import aiohttp
 from cachetools import TTLCache
 from concurrent.futures import ThreadPoolExecutor
 import threading
