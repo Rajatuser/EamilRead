@@ -14,13 +14,15 @@ import {
   useTheme,
   FormControl,
   Select,
-  MenuItem
+  MenuItem,
+  Stack
 } from '@mui/material';
 import { 
   Refresh as RefreshIcon,
   Mail as MailIcon,
   ErrorOutline as ErrorIcon,
-  FilterList as FilterIcon
+  FilterList as FilterIcon,
+  FormatListNumbered as ListIcon
 } from '@mui/icons-material';
 
 export default function EmailReader() {
@@ -28,13 +30,16 @@ export default function EmailReader() {
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [filter, setFilter] = React.useState('ALL');
+  const [limit, setLimit] = React.useState(100);
   const theme = useTheme();
 
-  const fetchData = async (keyword = 'all') => {
+  const fetchData = async (keyword = 'all', emailLimit = limit) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`http://192.168.0.129:8000/emails/${keyword.toLowerCase()}?limit=100`);
+      const response = await axios.get(
+        `http://192.168.0.129:8000/emails/${keyword.toLowerCase()}?limit=${emailLimit}`
+      );
       setData(response.data);
     } catch (err) {
       console.error(err);
@@ -51,7 +56,13 @@ export default function EmailReader() {
   const handleFilterChange = async (event) => {
     const newFilter = event.target.value;
     setFilter(newFilter);
-    await fetchData(newFilter);
+    await fetchData(newFilter, limit);
+  };
+
+  const handleLimitChange = async (event) => {
+    const newLimit = event.target.value;
+    setLimit(newLimit);
+    await fetchData(filter, newLimit);
   };
 
   const handleEmailClick = (email, index) => {
@@ -59,7 +70,7 @@ export default function EmailReader() {
   };
 
   const handleRefresh = () => {
-    fetchData(filter);
+    fetchData(filter, limit);
   };
 
   const LoadingSkeleton = () => (
@@ -170,48 +181,95 @@ export default function EmailReader() {
             </Button>
           </Box>
 
-          {/* Filter Select */}
-          <FormControl 
-            fullWidth
-            size="small"
-            sx={{ 
-              backgroundColor: 'white',
-              borderRadius: 1,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: 'transparent',
+          {/* Filters Stack */}
+          <Stack spacing={2}>
+            {/* Filter Select */}
+            <FormControl 
+              fullWidth
+              size="small"
+              sx={{ 
+                backgroundColor: 'white',
+                borderRadius: 1,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                  }
                 },
-                '&:hover fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&.Mui-disabled': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                }
-              },
-            }}
-          >
-            <Select
-              value={filter}
-              onChange={handleFilterChange}
-              displayEmpty
-              disabled={loading}
-              startAdornment={
-                <FilterIcon 
-                  sx={{ 
-                    mr: 1, 
-                    color: loading ? theme.palette.action.disabled : theme.palette.primary.main 
-                  }} 
-                />
-              }
+              }}
             >
-              <MenuItem value="ALL">All Emails</MenuItem>
-              <MenuItem value="ATS">ATS</MenuItem>
-              <MenuItem value="TMO">TMO</MenuItem>
-            </Select>
-          </FormControl>
+              <Select
+                value={filter}
+                onChange={handleFilterChange}
+                displayEmpty
+                disabled={loading}
+                startAdornment={
+                  <FilterIcon 
+                    sx={{ 
+                      mr: 1, 
+                      color: loading ? theme.palette.action.disabled : theme.palette.primary.main 
+                    }} 
+                  />
+                }
+              >
+                <MenuItem value="ALL">All Emails</MenuItem>
+                <MenuItem value="ATS">ATS</MenuItem>
+                <MenuItem value="TMO">TMO</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Limit Select */}
+            <FormControl 
+              fullWidth
+              size="small"
+              sx={{ 
+                backgroundColor: 'white',
+                borderRadius: 1,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                  }
+                },
+              }}
+            >
+              <Select
+                value={limit}
+                onChange={handleLimitChange}
+                displayEmpty
+                disabled={loading}
+                startAdornment={
+                  <ListIcon 
+                    sx={{ 
+                      mr: 1, 
+                      color: loading ? theme.palette.action.disabled : theme.palette.primary.main 
+                    }} 
+                  />
+                }
+              >
+                <MenuItem value={10}>10 Emails</MenuItem>
+                <MenuItem value={50}>50 Emails</MenuItem>
+                <MenuItem value={100}>100 Emails</MenuItem>
+                <MenuItem value={200}>200 Emails</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
         </Box>
 
         <CardContent sx={{ p: 0 }}>
