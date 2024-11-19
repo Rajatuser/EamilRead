@@ -83,7 +83,6 @@ def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limi
             total_emails = len(data[0].split())  # Get the total number of emails
             # Update the limit if there are fewer emails than the current limit
             adjusted_limit = min(limit, total_emails)
-            print(adjusted_limit , "#########################3")
             msg_nums = data[0].split()[-adjusted_limit:]  # Fetch the latest 'adjusted_limit' emails
             
             for msg_num in msg_nums:
