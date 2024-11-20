@@ -5,12 +5,10 @@ import EmailDetails from './components/EmailDetails';
 import './App.css';
 
 const App = () => {
-  const [selectedEmail, setSelectedEmail] = useState(null);
 
   return (
     <div>
-      <EmailRead onSelectEmail={setSelectedEmail} />
-      {/* <EmailDetails email={selectedEmail} /> */}
+      <EmailRead />
     </div>
   );
 };

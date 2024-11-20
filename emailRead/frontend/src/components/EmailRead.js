@@ -19,7 +19,8 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Fade
+  Fade,
+  TextField
 } from '@mui/material';
 import { 
   Refresh as RefreshIcon,
@@ -28,23 +29,37 @@ import {
   FilterList as FilterIcon,
   FormatListNumbered as ListIcon,
   CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon
+  Cancel as CancelIcon,
+  CalendarToday as CalendarIcon
 } from '@mui/icons-material';
 
 export default function EmailReader() {
+  // Get date 30 days ago
+  const getDefaultDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+  };
+
+  // Get today's date for max date restriction
+  const getTodayDate = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+
   const [data, setData] = React.useState([]);
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [filter, setFilter] = React.useState('ALL');
   const [limit, setLimit] = React.useState(50);
+  const [selectedDate, setSelectedDate] = React.useState(getDefaultDate());
   const theme = useTheme();
 
-  const fetchData = async (keyword = 'all', emailLimit = limit) => {
+  const fetchData = async (keyword = 'all', emailLimit = limit, checkDate = selectedDate) => {
     setLoading(true);
     setError(null);
     try {
       const response = await axios.get(
-        `http://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/emails/${keyword.toLowerCase()}?limit=${emailLimit}`
+        `http://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/emails/${keyword.toLowerCase()}?${checkDate ? `checkDate=${checkDate}` : ''}&limit=${emailLimit}`
       );
       setData(response.data);
     } catch (err) {
@@ -71,12 +86,21 @@ export default function EmailReader() {
     await fetchData(filter, newLimit);
   };
 
+  const handleDateChange = async (event) => {
+    const newDate = event.target.value;
+    // Only update if the selected date is not in the future
+    if (newDate <= getTodayDate()) {
+      setSelectedDate(newDate);
+      await fetchData(filter, limit, newDate);
+    }
+  };
+
   const handleEmailClick = (email, index) => {
     console.log(`Email ${index + 1} clicked`, email);
   };
 
   const handleRefresh = () => {
-    fetchData(filter, limit);
+    fetchData(filter, limit, selectedDate);
   };
 
   const LoadingSkeleton = () => (
@@ -244,8 +268,55 @@ export default function EmailReader() {
               </Select>
             </FormControl>
 
+            {/* Date Selector */}
+            <FormControl 
+              sx={{ 
+                flex: 1,
+                backgroundColor: 'white',
+                borderRadius: 1,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'transparent',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'transparent',
+                  },
+                },
+              }}
+              size="small"
+            >
+              <TextField
+                type="date"
+                value={selectedDate}
+                onChange={handleDateChange}
+                disabled={loading}
+                size="small"
+                inputProps={{
+                  max: getTodayDate() // This restricts future dates
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <CalendarIcon sx={{ mr: 1, color: theme.palette.primary.main }} />
+                  ),
+                }}
+                sx={{ 
+                  flex: 1,
+                  backgroundColor: 'white',
+                  borderRadius: 1,
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': {
+                      borderColor: 'transparent',
+                    },
+                    '&:hover fieldset': {
+                      borderColor: 'transparent',
+                    },
+                  },
+                }}
+              />
+            </FormControl>
+
             {/* Limit Select */}
-            {/* <FormControl 
+            <FormControl 
               sx={{ 
                 flex: 1,
                 backgroundColor: 'white',
@@ -272,7 +343,7 @@ export default function EmailReader() {
                 <MenuItem value={100}>100 Emails</MenuItem>
                 <MenuItem value={200}>200 Emails</MenuItem>
               </Select>
-            </FormControl> */}
+            </FormControl>
           </Stack>
         </Box>
 
@@ -321,7 +392,7 @@ export default function EmailReader() {
                 <TableBody>
                   {data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} align="center">
+                      <TableCell colSpan={6} align="center">
                         <Typography sx={{ py: 2, color: theme.palette.text.secondary }}>
                           No emails found for the selected filter
                         </Typography>
@@ -344,7 +415,7 @@ export default function EmailReader() {
                         <TableCell>{email.subject}</TableCell>
                         <TableCell>{email.date}</TableCell>
                         <TableCell>
-                          {email.urgent ? ( // Random urgent status for demonstration
+                          {email.urgent ? (
                             <CheckCircleIcon sx={{ color: theme.palette.error.main }} />
                           ) : (
                             <CancelIcon sx={{ color: theme.palette.success.main }} />

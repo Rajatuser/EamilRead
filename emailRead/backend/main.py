@@ -45,7 +45,7 @@ def get_imap_connection():
     mail.select(folder)
     return mail
 
-def fetch_email_batch(keyword: Optional[str] = None, limit: int = 50) -> List[EmailSubjectResponse]:
+def fetch_email_batch(keyword: Optional[str] = None, limit: int = 50, formatted_date: str = None) -> List[EmailSubjectResponse]:
     """Fetch a batch of emails."""
     emails = []
     urgency_terms = [
@@ -59,11 +59,10 @@ def fetch_email_batch(keyword: Optional[str] = None, limit: int = 50) -> List[Em
         "Necessary-action", "Alarmed", "Speedy", "Deadline-critical", "ASAP", "Action Needed"
     ]
     sku_pattern = r"\b(?:SKU-?\d+|[A-Z0-9-]{5,})\b"
-    today = datetime.today()
-    date_50_days_before = today - timedelta(days=50)
-    formatted_date = date_50_days_before.strftime("%d-%b-%Y")
-
+    
     try:
+        # Ensure limit is not None
+        limit = limit or 50  # Default limit to 50 if None
         mail = get_imap_connection()
         result, data = mail.search(None, 'SINCE', formatted_date)
 
@@ -108,6 +107,7 @@ def fetch_email_batch(keyword: Optional[str] = None, limit: int = 50) -> List[Em
     pprint(emails)
     return emails
 
+
 def fetch_email_by_id(email_id: str) -> dict:
     """Fetch a single email by ID."""
     try:
@@ -148,14 +148,27 @@ def fetch_email_by_id(email_id: str) -> dict:
         raise HTTPException(status_code=500, detail="An error occurred while fetching the email")
 
 @app.get("/emails/all", response_model=List[EmailSubjectResponse])
-async def get_email_subjects(limit: Optional[int] = None):
-    """Get all email subjects."""
-    return fetch_email_batch(None, limit=limit)
+async def get_email_subjects(checkDate: Optional[str] = None, limit: Optional[int] = None):
+    """Get all email subjects with optional date filtering."""
+    if checkDate is None:
+        # If checkDate is not provided, set it to 40 days before the current date
+        checkDate = (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d")
+        print(f"No checkDate provided. Defaulting to {checkDate}")
+        
+    formatted_date = datetime.strptime(checkDate, "%Y-%m-%d").strftime("%d-%b-%Y")
+    return fetch_email_batch(None, limit=limit, formatted_date=formatted_date)
+
 
 @app.get("/emails/{keyword}", response_model=List[EmailSubjectResponse])
-async def get_email_subjects(keyword: str, limit: Optional[int] = None):
-    """Get filtered email subjects."""
-    return fetch_email_batch(keyword, limit=limit)
+async def get_email_subjects(keyword: str, checkDate: Optional[str] = None, limit: Optional[int] = None):
+    """Get filtered email subjects with optional date filtering."""
+    if checkDate is None:
+        # If checkDate is not provided, set it to 40 days before the current date
+        checkDate = (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d")
+        print(f"No checkDate provided. Defaulting to {checkDate}")
+        
+    formatted_date = datetime.strptime(checkDate, "%Y-%m-%d").strftime("%d-%b-%Y")
+    return fetch_email_batch(keyword, limit=limit, formatted_date=formatted_date)
 
 @app.get("/email/{email_id}")
 async def get_email_by_id(email_id: str):
