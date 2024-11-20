@@ -11,7 +11,8 @@ from cachetools import TTLCache
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import re
-
+from dotenv import load_dotenv
+load_dotenv()
 # Environment variables
 server = os.getenv("IMAP_SERVER", "imap.gmail.com")
 email_user = os.getenv("EMAIL_USER", "ashishkhuranatalentelgia@gmail.com")
@@ -125,11 +126,8 @@ def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limi
 def fetch_emails(keyword: str, limit: int = 10) -> List[EmailSubjectResponse]:
     """Fetch emails with parallel processing and caching"""
     try:
-
         email_subjects = fetch_email_batch([], keyword, limit)
-
         return email_subjects
-
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail="An error occurred while fetching emails")
