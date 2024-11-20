@@ -185,12 +185,12 @@ async def get_email_subjects(limit: Optional[int] = None):
 @app.get("/emails/{keyword}", response_model=List[EmailSubjectResponse])
 async def get_email_subjects(keyword: str, limit: Optional[int] = None):
     """Get filtered email subjects"""
-    return await fetch_emails(keyword, limit=limit)
+    return fetch_emails(keyword, limit=limit)
 
 @app.get("/email/{email_id}")
 async def get_email_by_id(email_id: str):
     """Get single email details"""
-    return await fetch_email_by_id(email_id)
+    return fetch_email_by_id(email_id)
 
 if __name__ == "__main__":
     import uvicorn
