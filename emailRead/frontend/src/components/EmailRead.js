@@ -203,7 +203,7 @@ export default function EmailReader() {
           </Box>
 
           {/* Filters Stack */}
-          <Stack direction="row" spacing={2}>
+          <Stack direction="row" spacing={1}>
             {/* Filter Select */}
             <FormControl 
               sx={{ 
@@ -234,7 +234,7 @@ export default function EmailReader() {
             </FormControl>
 
             {/* Limit Select */}
-            <FormControl 
+            {/* <FormControl 
               sx={{ 
                 flex: 1,
                 backgroundColor: 'white',
@@ -261,7 +261,7 @@ export default function EmailReader() {
                 <MenuItem value={100}>100 Emails</MenuItem>
                 <MenuItem value={200}>200 Emails</MenuItem>
               </Select>
-            </FormControl>
+            </FormControl> */}
           </Stack>
         </Box>
 
@@ -296,6 +296,7 @@ export default function EmailReader() {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ width: '80px', fontWeight: 'bold' }}>Sr No</TableCell>
+                  <TableCell sx={{ width: '80px', fontWeight: 'bold' }}>From</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Subject</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
                   <TableCell sx={{ width: '100px', fontWeight: 'bold' }}>Urgent</TableCell>
@@ -328,6 +329,7 @@ export default function EmailReader() {
                         }}
                       >
                         <TableCell>{index + 1}</TableCell>
+                        <TableCell>{email.From}</TableCell>
                         <TableCell>{email.subject}</TableCell>
                         <TableCell>{email.date}</TableCell>
                         <TableCell>

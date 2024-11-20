@@ -14,12 +14,12 @@ import re
 from dotenv import load_dotenv
 load_dotenv()
 # Environment variables
-server = os.getenv("IMAP_SERVER", "imap.gmail.com")
-email_user = os.getenv("EMAIL_USER", "ashishkhuranatalentelgia@gmail.com")
-email_pass = os.getenv("EMAIL_PASS", "sufc vywh pcxe lnes")
-folder = os.getenv("EMAIL_FOLDER", "INBOX")
-cache_ttl = int(os.getenv("CACHE_TTL", 300))  # Cache timeout in seconds
-max_workers = int(os.getenv("MAX_WORKERS", 5))  # Maximum number of thread workers
+server = os.getenv("IMAP_SERVER")
+email_user = os.getenv("EMAIL_USER")
+email_pass = os.getenv("EMAIL_PASS")
+folder = os.getenv("EMAIL_FOLDER")
+cache_ttl = int(os.getenv("CACHE_TTL"))  # Cache timeout in seconds
+max_workers = int(os.getenv("MAX_WORKERS"))  # Maximum number of thread workers
 
 app = FastAPI()
 
@@ -35,6 +35,7 @@ app.add_middleware(
 class EmailSubjectResponse(BaseModel):
     subject: str
     email_id: str
+    From: str
     date: str
     urgent: bool
     sku: Optional[str] = None
@@ -64,7 +65,7 @@ def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limi
         "Severe", "Pinnacle", "Burning", "Urgency", "Urgent", "Unavoidable", "Must-do", "Grave",
         "Immediate-action", "Top-priority", "Demanding", "Overdue", "Peak", "Now",
         "Deadline-driven", "Accelerated", "Mandatory", "Pivotal", "Clamoring",
-        "Necessary-action", "Alarmed", "Speedy", "Deadline-critical"
+        "Necessary-action", "Alarmed", "Speedy", "Deadline-critical","ASAP", "Action Needed"
     ]
     # SKU pattern (matches SKUs anywhere in the subject)
     sku_pattern = r"[A-Z]{2}-[A-Z]{2}-[A-Z]{1,3}-\d{6}"
@@ -99,6 +100,7 @@ def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limi
                             subject = subject.decode(encoding if encoding else "utf-8")
                         
                         date_str = msg.get("Date")
+                        from_data = msg.get("From")
                         urgent = any(term.lower() in subject.lower() for term in urgency_terms)
 
                         # Extract SKU if it matches the pattern
@@ -109,6 +111,7 @@ def fetch_email_batch(msg_nums: List[bytes], keyword: Optional[str] = None, limi
                             email_id=msg_num.decode(),
                             subject=subject,
                             date=date_str,
+                            From=from_data,
                             urgent=urgent,
                             sku=sku  # Add SKU to the response
                         )
