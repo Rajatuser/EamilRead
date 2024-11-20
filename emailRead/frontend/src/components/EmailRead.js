@@ -98,6 +98,17 @@ export default function EmailReader() {
             <Box
               sx={{
                 height: 20,
+                width: '40px',
+                backgroundColor: 'rgba(0, 0, 0, 0.11)',
+                borderRadius: 1,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
+          </TableCell>
+          <TableCell>
+            <Box
+              sx={{
+                height: 20,
                 width: '60%',
                 backgroundColor: 'rgba(0, 0, 0, 0.11)',
                 borderRadius: 1,
