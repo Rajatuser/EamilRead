@@ -56,7 +56,7 @@ def fetch_email_batch(keyword: Optional[str] = None, limit: int = 50, formatted_
         "Severe", "Pinnacle", "Burning", "Urgency", "Urgent", "Unavoidable", "Must-do", "Grave",
         "Immediate-action", "Top-priority", "Demanding", "Overdue", "Peak", "Now",
         "Deadline-driven", "Accelerated", "Mandatory", "Pivotal", "Clamoring",
-        "Necessary-action", "Alarmed", "Speedy", "Deadline-critical", "ASAP", "Action Needed"
+        "Necessary-action", "Alarmed", "Speedy", "Deadline-critical", "ASAP", "Action Needed","Alert","Security"
     ]
     sku_pattern = r"\b(?:SKU-?\d+|[A-Z0-9-]{5,})\b"
     
